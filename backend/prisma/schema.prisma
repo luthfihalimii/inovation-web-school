@@ -1,0 +1,1119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+  STAFF
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+  SICK
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  LATE
+  GRADED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentType {
+  SPP
+  PPDB
+  PRACTICAL
+  UNIFORM
+  BOOK
+  OTHER
+}
+
+enum PPDBStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  ACCEPTED
+  REJECTED
+  REGISTERED
+}
+
+enum SemesterType {
+  GANJIL
+  GENAP
+}
+
+enum EventType {
+  ACADEMIC
+  EXTRACURRICULAR
+  COMPETITION
+  CEREMONY
+  WORKSHOP
+  OTHER
+}
+
+enum NotificationType {
+  GENERAL
+  ASSIGNMENT
+  GRADE
+  ATTENDANCE
+  PAYMENT
+  ANNOUNCEMENT
+  MESSAGE
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+// ============================================
+// AUTHENTICATION (BetterAuth Integration)
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String
+  image         String?
+  role          UserRole  @default(STUDENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  student       Student?
+  teacher       Teacher?
+  parent        Parent?
+  admin         Admin?
+  notifications Notification[]
+  sentMessages  Message[]        @relation("SentMessages")
+  receivedMessages Message[]     @relation("ReceivedMessages")
+  badges        UserBadge[]
+  points        Point[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?  @db.Text
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// CORE USER ENTITIES
+// ============================================
+
+model Student {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  nis               String    @unique // Nomor Induk Siswa
+  nisn              String    @unique // Nomor Induk Siswa Nasional
+  classId           String?
+  majorId           String
+  dateOfBirth       DateTime
+  placeOfBirth      String
+  gender            Gender
+  address           String
+  phone             String?
+  parentId          String?
+  enrollmentYear    Int
+  graduationYear    Int?
+  photo             String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class             Class?            @relation(fields: [classId], references: [id])
+  major             Major             @relation(fields: [majorId], references: [id])
+  parent            Parent?           @relation(fields: [parentId], references: [id])
+  attendances       Attendance[]
+  grades            Grade[]
+  submissions       Submission[]
+  leaveRequests     LeaveRequest[]
+  payments          Payment[]
+  portfolio         Portfolio?
+  achievements      Achievement[]
+  counselingSessions CounselingSession[]
+  quizAttempts      QuizAttempt[]
+
+  @@index([userId])
+  @@index([nis])
+  @@index([nisn])
+  @@index([classId])
+  @@index([majorId])
+}
+
+model Teacher {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  nip               String    @unique // Nomor Induk Pegawai
+  dateOfBirth       DateTime
+  placeOfBirth      String
+  gender            Gender
+  address           String
+  phone             String
+  specialization    String? // Subject specialization
+  hireDate          DateTime
+  photo             String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedules         Schedule[]
+  assignments       Assignment[]
+  grades            Grade[]
+  courseMaterials   CourseMaterial[]
+  quizzes           Quiz[]
+  homeroomClasses   Class[]
+  counselingSessions CounselingSession[]
+
+  @@index([userId])
+  @@index([nip])
+}
+
+model Parent {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  nik         String    @unique // NIK KTP
+  occupation  String?
+  phone       String
+  address     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students Student[]
+
+  @@index([userId])
+}
+
+model Admin {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  nip         String?   @unique
+  position    String? // Kepala Sekolah, Staff TU, etc
+  phone       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================
+// ACADEMIC STRUCTURE
+// ============================================
+
+model AcademicYear {
+  id          String    @id @default(cuid())
+  year        String    @unique // "2024/2025"
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  semesters   Semester[]
+  classes     Class[]
+  schedules   Schedule[]
+
+  @@index([isActive])
+}
+
+model Semester {
+  id              String       @id @default(cuid())
+  academicYearId  String
+  type            SemesterType
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  grades          Grade[]
+  assignments     Assignment[]
+
+  @@unique([academicYearId, type])
+  @@index([isActive])
+}
+
+model Major {
+  id          String    @id @default(cuid())
+  code        String    @unique // "TKJ", "RPL", "MM", etc
+  name        String // "Teknik Komputer & Jaringan"
+  description String?   @db.Text
+  image       String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  students    Student[]
+  classes     Class[]
+  subjects    Subject[]
+
+  @@index([code])
+}
+
+model Class {
+  id              String    @id @default(cuid())
+  academicYearId  String
+  majorId         String
+  grade           Int // 10, 11, 12
+  section         String // "1", "2", "3"
+  name            String // "10 TKJ 1"
+  homeroomTeacherId String?
+  maxStudents     Int       @default(36)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  academicYear     AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  major            Major        @relation(fields: [majorId], references: [id])
+  homeroomTeacher  Teacher?     @relation(fields: [homeroomTeacherId], references: [id])
+  students         Student[]
+  schedules        Schedule[]
+  assignments      Assignment[]
+  attendances      Attendance[]
+  discussions      Discussion[]
+
+  @@unique([academicYearId, majorId, grade, section])
+  @@index([academicYearId])
+  @@index([majorId])
+}
+
+model Subject {
+  id          String    @id @default(cuid())
+  majorId     String?
+  code        String    @unique
+  name        String
+  description String?   @db.Text
+  isCore      Boolean   @default(true) // Core vs Elective
+  credits     Int       @default(2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  major           Major?            @relation(fields: [majorId], references: [id])
+  schedules       Schedule[]
+  assignments     Assignment[]
+  grades          Grade[]
+  courseMaterials CourseMaterial[]
+  quizzes         Quiz[]
+
+  @@index([code])
+  @@index([majorId])
+}
+
+model Schedule {
+  id              String    @id @default(cuid())
+  academicYearId  String
+  classId         String
+  subjectId       String
+  teacherId       String
+  dayOfWeek       Int // 1-7 (Monday-Sunday)
+  startTime       String // "08:00"
+  endTime         String // "09:40"
+  room            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  class        Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id])
+  teacher      Teacher      @relation(fields: [teacherId], references: [id])
+
+  @@index([classId, dayOfWeek])
+  @@index([teacherId])
+}
+
+// ============================================
+// LEARNING & ASSESSMENT
+// ============================================
+
+model Attendance {
+  id          String           @id @default(cuid())
+  studentId   String
+  classId     String
+  date        DateTime
+  status      AttendanceStatus
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id])
+
+  @@unique([studentId, classId, date])
+  @@index([studentId])
+  @@index([classId, date])
+}
+
+model LeaveRequest {
+  id          String             @id @default(cuid())
+  studentId   String
+  startDate   DateTime
+  endDate     DateTime
+  reason      String             @db.Text
+  document    String? // URL to uploaded document
+  status      LeaveRequestStatus @default(PENDING)
+  reviewNote  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([status])
+}
+
+model Assignment {
+  id          String           @id @default(cuid())
+  teacherId   String
+  classId     String
+  subjectId   String
+  semesterId  String
+  title       String
+  description String           @db.Text
+  dueDate     DateTime
+  maxScore    Int              @default(100)
+  attachments String[] // Array of file URLs
+  status      AssignmentStatus @default(DRAFT)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  teacher     Teacher      @relation(fields: [teacherId], references: [id])
+  class       Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject     Subject      @relation(fields: [subjectId], references: [id])
+  semester    Semester     @relation(fields: [semesterId], references: [id])
+  submissions Submission[]
+
+  @@index([teacherId])
+  @@index([classId])
+  @@index([subjectId])
+  @@index([dueDate])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  studentId    String
+  content      String           @db.Text
+  attachments  String[] // Array of file URLs
+  score        Float?
+  feedback     String?          @db.Text
+  status       SubmissionStatus @default(PENDING)
+  submittedAt  DateTime         @default(now())
+  gradedAt     DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model Grade {
+  id          String   @id @default(cuid())
+  studentId   String
+  subjectId   String
+  semesterId  String
+  teacherId   String
+  score       Float
+  gradeType   String // "UH1", "UH2", "UTS", "UAS", "PRAKTIK"
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject  Subject  @relation(fields: [subjectId], references: [id])
+  semester Semester @relation(fields: [semesterId], references: [id])
+  teacher  Teacher  @relation(fields: [teacherId], references: [id])
+
+  @@index([studentId])
+  @@index([subjectId])
+  @@index([semesterId])
+}
+
+// ============================================
+// E-LEARNING
+// ============================================
+
+model CourseMaterial {
+  id          String   @id @default(cuid())
+  teacherId   String
+  subjectId   String
+  title       String
+  description String?  @db.Text
+  content     String   @db.Text
+  attachments String[] // URLs
+  videoUrl    String?
+  isPublished Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+  subject Subject @relation(fields: [subjectId], references: [id])
+
+  @@index([subjectId])
+  @@index([teacherId])
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  teacherId   String
+  subjectId   String
+  title       String
+  description String?  @db.Text
+  duration    Int // in minutes
+  maxScore    Int      @default(100)
+  startDate   DateTime
+  endDate     DateTime
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  teacher      Teacher       @relation(fields: [teacherId], references: [id])
+  subject      Subject       @relation(fields: [subjectId], references: [id])
+  questions    QuizQuestion[]
+  attempts     QuizAttempt[]
+
+  @@index([subjectId])
+  @@index([teacherId])
+}
+
+model QuizQuestion {
+  id          String   @id @default(cuid())
+  quizId      String
+  question    String   @db.Text
+  options     String[] // JSON array of options
+  correctAnswer String
+  points      Int      @default(1)
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  quizId      String
+  studentId   String
+  answers     Json // Store answers as JSON
+  score       Float
+  startedAt   DateTime @default(now())
+  submittedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  quiz    Quiz    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+  @@index([studentId])
+}
+
+model Discussion {
+  id          String   @id @default(cuid())
+  classId     String
+  authorId    String
+  title       String
+  content     String   @db.Text
+  attachments String[]
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  class   Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  replies DiscussionReply[]
+
+  @@index([classId])
+}
+
+model DiscussionReply {
+  id           String   @id @default(cuid())
+  discussionId String
+  authorId     String
+  content      String   @db.Text
+  attachments  String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  discussion Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  @@index([discussionId])
+}
+
+// ============================================
+// PPDB (Penerimaan Peserta Didik Baru)
+// ============================================
+
+model PPDBApplication {
+  id              String      @id @default(cuid())
+  registrationNo  String      @unique
+  fullName        String
+  email           String
+  phone           String
+  nis             String?
+  nisn            String?
+  dateOfBirth     DateTime
+  placeOfBirth    String
+  gender          Gender
+  address         String      @db.Text
+  majorChoice1    String
+  majorChoice2    String?
+  schoolOrigin    String
+  averageScore    Float
+  status          PPDBStatus  @default(DRAFT)
+  score           Float?
+  notes           String?     @db.Text
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  documents PPDBDocument[]
+  payment   PPDBPayment?
+
+  @@index([registrationNo])
+  @@index([status])
+  @@index([email])
+}
+
+model PPDBDocument {
+  id            String          @id @default(cuid())
+  applicationId String
+  documentType  String // "KTP", "KK", "IJAZAH", "RAPORT", etc
+  fileName      String
+  fileUrl       String
+  isVerified    Boolean         @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  application PPDBApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model PPDBPayment {
+  id            String        @id @default(cuid())
+  applicationId String        @unique
+  amount        Float
+  paymentMethod String? // "BANK_TRANSFER", "VA", "QRIS"
+  paymentCode   String? // VA number or payment code
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  application PPDBApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([status])
+}
+
+// ============================================
+// FINANCIAL
+// ============================================
+
+model Payment {
+  id            String        @id @default(cuid())
+  studentId     String
+  invoiceId     String
+  amount        Float
+  paymentType   PaymentType
+  paymentMethod String? // "BANK_TRANSFER", "VA", "QRIS", "CASH"
+  paymentCode   String? // VA number or reference
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@index([invoiceId])
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  invoiceNo   String        @unique
+  studentId   String
+  paymentType PaymentType
+  amount      Float
+  description String
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  payments Payment[]
+
+  @@index([studentId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ============================================
+// COUNSELING
+// ============================================
+
+model CounselingSession {
+  id          String    @id @default(cuid())
+  studentId   String
+  counselorId String
+  sessionDate DateTime
+  topic       String
+  notes       String    @db.Text
+  followUp    String?   @db.Text
+  isConfidential Boolean @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  counselor Teacher @relation(fields: [counselorId], references: [id])
+
+  @@index([studentId])
+  @@index([counselorId])
+  @@index([sessionDate])
+}
+
+// ============================================
+// PORTFOLIO & ACHIEVEMENT
+// ============================================
+
+model Portfolio {
+  id          String   @id @default(cuid())
+  studentId   String   @unique
+  bio         String?  @db.Text
+  skills      String[] // Array of skills
+  interests   String[]
+  socialLinks Json? // {linkedin, github, instagram, etc}
+  isPublic    Boolean  @default(false)
+  slug        String   @unique
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  student Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  items   PortfolioItem[]
+
+  @@index([slug])
+}
+
+model PortfolioItem {
+  id          String   @id @default(cuid())
+  portfolioId String
+  title       String
+  description String   @db.Text
+  category    String // "PROJECT", "COMPETITION", "CERTIFICATE", "ARTWORK"
+  images      String[]
+  videoUrl    String?
+  linkUrl     String?
+  startDate   DateTime?
+  endDate     DateTime?
+  tags        String[]
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  studentId   String
+  title       String
+  description String   @db.Text
+  category    String // "ACADEMIC", "COMPETITION", "ORGANIZATION", "SPORTS"
+  level       String // "SEKOLAH", "KOTA", "PROVINSI", "NASIONAL", "INTERNASIONAL"
+  rank        String? // "Juara 1", "Juara 2", etc
+  organizer   String
+  eventDate   DateTime
+  certificate String? // Certificate URL
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([category])
+}
+
+model Certificate {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  issuer      String
+  issueDate   DateTime
+  expiryDate  DateTime?
+  credentialId String?
+  fileUrl     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ============================================
+// COMMUNICATION
+// ============================================
+
+model Announcement {
+  id          String    @id @default(cuid())
+  authorId    String
+  title       String
+  content     String    @db.Text
+  category    String // "ACADEMIC", "EVENT", "IMPORTANT", "GENERAL"
+  targetRoles String[] // ["STUDENT", "TEACHER", "PARENT"]
+  targetClasses String[] // Class IDs
+  attachments String[]
+  isPinned    Boolean   @default(false)
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@index([publishedAt])
+}
+
+model Message {
+  id         String        @id @default(cuid())
+  senderId   String
+  receiverId String
+  subject    String?
+  content    String        @db.Text
+  attachments String[]
+  status     MessageStatus @default(SENT)
+  readAt     DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  // Relations
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  data      Json? // Additional data
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+// ============================================
+// CONTENT MANAGEMENT
+// ============================================
+
+model News {
+  id          String    @id @default(cuid())
+  authorId    String
+  title       String
+  slug        String    @unique
+  excerpt     String?
+  content     String    @db.Text
+  coverImage  String?
+  category    String // "ACHIEVEMENT", "EVENT", "ANNOUNCEMENT", "GENERAL"
+  tags        String[]
+  views       Int       @default(0)
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([category])
+  @@index([publishedAt])
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  description String    @db.Text
+  type        EventType
+  location    String
+  startDate   DateTime
+  endDate     DateTime
+  coverImage  String?
+  isPublic    Boolean   @default(true)
+  maxParticipants Int?
+  registrationDeadline DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  gallery EventGallery[]
+
+  @@index([slug])
+  @@index([type])
+  @@index([startDate])
+}
+
+model EventGallery {
+  id          String   @id @default(cuid())
+  eventId     String
+  title       String?
+  description String?
+  fileUrl     String
+  fileType    String // "IMAGE", "VIDEO"
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model Gallery {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  category    String // "EVENT", "FACILITY", "ACTIVITY", "ACHIEVEMENT"
+  coverImage  String
+  images      String[]
+  uploadedBy  String
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isPublished])
+}
+
+model MediaFile {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileUrl     String
+  fileType    String // "IMAGE", "VIDEO", "DOCUMENT", "AUDIO"
+  fileSize    Int // in bytes
+  mimeType    String
+  uploadedBy  String
+  folder      String? // For organization
+  tags        String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([fileType])
+  @@index([uploadedBy])
+  @@index([folder])
+}
+
+// ============================================
+// GAMIFICATION
+// ============================================
+
+model Badge {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String   @db.Text
+  icon        String
+  category    String // "ACADEMIC", "ATTENDANCE", "PARTICIPATION", "ACHIEVEMENT"
+  criteria    Json // Requirements to earn badge
+  points      Int      @default(0)
+  rarity      String // "COMMON", "RARE", "EPIC", "LEGENDARY"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userBadges UserBadge[]
+
+  @@index([category])
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+model Point {
+  id          String   @id @default(cuid())
+  userId      String
+  points      Int
+  reason      String
+  category    String // "ASSIGNMENT", "ATTENDANCE", "ACHIEVEMENT", "PARTICIPATION"
+  referenceId String? // Related entity ID
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([category])
+}
+
+model Leaderboard {
+  id          String   @id @default(cuid())
+  userId      String
+  category    String // "OVERALL", "ACADEMIC", "ATTENDANCE"
+  period      String // "WEEKLY", "MONTHLY", "SEMESTER", "YEARLY"
+  score       Float
+  rank        Int
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, category, period, periodStart])
+  @@index([category, period, rank])
+}
